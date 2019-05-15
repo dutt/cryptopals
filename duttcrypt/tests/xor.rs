@@ -4,6 +4,8 @@ use std::thread;
 use duttcrypt::hex;
 use duttcrypt::xor;
 use duttcrypt::text;
+use duttcrypt::base64;
+
 
 #[test]
 fn test_xor() {
@@ -75,4 +77,14 @@ I go crazy when I hear a cymbal";
     let hex = hex::format_hex_str(&encrypted);
     let expected_hex = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
     assert_eq!(hex, expected_hex);
+}
+
+#[test]
+fn break_xor_repeated() {
+    let path = "6.txt";
+    let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
+    let bytes = base64::decode(&content);
+    let result = xor::decrypt_bytes(&bytes);
+    assert!(result.score >= 3515 and result.score <= 3525);
+    assert_eq!(&result.text[0..33], "I'm back and I'm ringii' the bell");
 }
