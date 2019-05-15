@@ -15,6 +15,6 @@ with open("rabbit.base64", 'rb') as reader:
     t64 = reader.read()
     t = base64.b64decode(t64)
 
-dist=20
+dist=len(t)
 print("\n".join(("%d %f" %(klen, get_keydistance(klen,t))) for klen in range(1,dist)))
 print("\n".join(("%d %f" %(klen, get_autocorrelation(klen,t))) for klen in range(1,dist)))

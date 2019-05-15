@@ -28,6 +28,28 @@ impl fmt::Debug for KeySize {
     }
 }
 
+struct KeysizeScore {
+    keysize : usize,
+    score : i32,
+    text : String
+}
+
+impl KeysizeScore {
+    pub fn new(keysize : usize, score : i32, text : String) -> KeysizeScore {
+        KeysizeScore {
+            keysize,
+            score,
+            text
+        }
+    }
+}
+
+impl fmt::Debug for KeysizeScore {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<keyscore ks={}, score={}>", self.keysize, self.score)
+    }
+}
+
 fn _write_rabbit() {
     let path = "rabbit.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
@@ -65,17 +87,28 @@ fn get_keydistance(keysize: usize, content: &[u8]) -> KeySize {
     let chunks : Vec<_> = content.chunks(keysize).collect();
     let a = chunks[0];
     let b = chunks[1];
-    let hamming = binary::hamming(a, b);
-    let norm_dist = hamming as f32 / keysize as f32;
+    let hamming_ab = binary::hamming(a, b);
+    let mut hamming_bc = 0;
+    let mut hamming_cd = 0;
+    if keysize > 2 {
+        let c = chunks[2];
+        hamming_bc = binary::hamming(b,c);
+        if keysize > 3 {
+            let d = chunks[3];
+            hamming_cd = binary::hamming(c,d);
+        }
+    }
+    let total_hamming = hamming_ab + hamming_bc + hamming_cd;
+    let norm_dist = total_hamming as f32 / keysize as f32;
     KeySize::new(keysize, norm_dist)
 }
 
 fn get_sizes(bytes : &[u8]) -> Vec<KeySize> {
     let mut sizes = Vec::new();
-    for keysize in 2.. 15 {
-        println!("keysize {}", keysize);
+    for keysize in 2.. 40 {
+        //println!("keysize {}", keysize);
         sizes.push(get_keydistance(keysize, &bytes));
-        println!(" ");
+        //println!(" ");
     }
     sizes.sort_by(|a,b| {
         if a.distance < b.distance && b.distance - a.distance > 0.005 {
@@ -90,26 +123,37 @@ fn get_sizes(bytes : &[u8]) -> Vec<KeySize> {
 }
 
 fn main() {
-    _write_rabbit();
-    let path = "rabbit.base64";
-    //let path = "6.txt";
+    //_write_rabbit();
+    //let path = "rabbit.txt";
+    //let path = "rabbit.base64";
+    let path = "6.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
     let bytes = base64::decode(&content);
-    let sizes = get_sizes(&bytes);
-    for s in &sizes {
-        println!("s {:?}", s);
+    //let bytes = content.as_bytes();
+    let mut sizes = get_sizes(&bytes);
+    //let keysize = sizes[0].keysize;
+    let _ = sizes.split_off(5);
+    println!("try sizes {:?}", sizes);
+    //let keysizes = vec![2,3,4,5,6,7];
+    let mut scores = Vec::new();
+    for keysize in sizes {
+        println!("assumed keysize {:?}", keysize);
+        let transposed = transpose_blocks(keysize.keysize, &bytes);
+        let mut keybytes = Vec::new();
+        for block in transposed {
+            let (_decrypted, keybyte) = xor::decrypt_byte(&block);
+            keybytes.push(keybyte);
+        }
+        //println!("keybytes {:?}", keybytes);
+        //println!("keybytes {:?}", text::bytes(&keybytes));
+        let decrypted = xor::xor_repeated(&bytes, &keybytes);
+        let score = xor::score(&decrypted);
+        let text = text::bytes(&decrypted);
+        scores.push(KeysizeScore::new(keysize.keysize, score, text));
+        //println!("decrypted {:?}", text::bytes(&decrypted));
+        //println!(" ");
     }
-    let keysize = sizes[0].keysize;
-
-    println!("assumed keysize {:?}", keysize);
-    let transposed = transpose_blocks(keysize, &bytes);
-    let mut keybytes = Vec::new();
-    for block in transposed {
-        let (_decrypted, keybyte) = xor::decrypt_byte(&block);
-        keybytes.push(keybyte);
-    }
-    println!("keybytes {:?}", keybytes);
-    println!("keybytes {:?}", text::bytes(&keybytes));
-    let decrypted = xor::xor_repeated(&bytes, &keybytes);
-    println!("decrypted {:?}", text::bytes(&decrypted));
+    scores.sort_by(|a,b| a.score.cmp(&b.score));
+    println!("scores {:?}", scores);
+    println!("decrypted {}", scores[0].text);
 }
