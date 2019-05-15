@@ -40,10 +40,10 @@ fn _write_rabbit() {
     let debase64ed = base64::decode(&base64ed);
     let clear = xor::xor_repeated(&debase64ed, key);
     assert_eq!(clear, bytes);
-    //let _ = match fs::write("rabbit.base64", &base64ed) {
-    //    Ok(_) => (),
-    //    Err(_) => ()
-    //};
+    let _ = match fs::write("rabbit.base64", &base64ed) {
+        Ok(_) => (),
+        Err(_) => ()
+    };
 }
 
 fn transpose_blocks(keysize: usize, data : &[u8]) -> Vec<Vec<u8>> {
@@ -92,6 +92,7 @@ fn get_sizes(bytes : &[u8]) -> Vec<KeySize> {
 fn main() {
     _write_rabbit();
     let path = "rabbit.base64";
+    //let path = "6.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
     let bytes = base64::decode(&content);
     let sizes = get_sizes(&bytes);
