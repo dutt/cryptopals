@@ -4,3 +4,4 @@ pub mod hex;
 pub mod text;
 pub mod binary;
 pub mod aes;
+pub mod pkcs7;

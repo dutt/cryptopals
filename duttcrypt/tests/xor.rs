@@ -60,7 +60,6 @@ fn run4() {
     let expected_result : Vec<u8> = vec![78, 111, 119, 32, 116, 104, 97, 116, 32, 116, 104, 101, 32, 112, 97, 114, 116, 121, 32, 105, 115, 32, 106, 117, 109, 112, 105, 110, 103, 10];
     let decrypted = text::bytes(&min_result);
     assert_eq!(decrypted, "Now that the party is jumping\n");
-    println!("{}", decrypted);
     assert_eq!(min_result, expected_result);
     assert_eq!(min_line, "7b5a4215415d544115415d5015455447414c155c46155f4058455c5b523f");
 }
