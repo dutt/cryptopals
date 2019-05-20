@@ -51,7 +51,7 @@ fn test_ecb_oracle() {
     let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
     let postfix = base64::decode(postfixstr);
     let padded_postfix = aes::pad_data(&postfix);
-    
+
     let blocksize = aes_oracle::guess_blocksize(&key, &padded_postfix);
     let data = vec![12;1024];
     let encrypted = aes_oracle::encrypt_with_postfix(&data, &key, &padded_postfix);
@@ -89,4 +89,74 @@ fn test_ecb_oracle() {
         all_known.pop();
     }
     assert_eq!(all_known, postfix);
+}
+
+// Challenge 13
+
+fn profile_for(email : &str) -> Vec<(String, String)> {
+    let mut data = String::from(email);
+    data = data.replace("&", "");
+    data = data.replace("=", "");
+    data = format!("email={}&uid=10&role=user", data);
+    parse(&data)
+}
+
+fn parse(text : &str) -> Vec<(String, String)> {
+    println!("parsing {:?}", text);
+    let mut retr = Vec::new();
+    let textstr = String::from(text);
+    let parts : Vec<_> = textstr.split('&').collect();
+    for p in parts {
+        let subparts : Vec<_> = p.split('=').collect();
+        let name = String::from(subparts[0]);
+        let value = String::from(subparts[1]);
+        retr.push((name, value));
+    }
+    retr
+}
+
+fn encode(data : Vec<(String, String)>) -> String {
+    let mut retr = String::new();
+    for p in &data {
+        if retr.len() > 0 {
+            retr += "&";
+        }
+        let key = &p.0;
+        let val = &p.1;
+        retr += &format!("{}={}", key, val);
+    }
+    retr
+}
+
+fn attack(encrypted : &[u8]) -> Vec<u8> {
+    let blobs : Vec<_> = encrypted.chunks(16).collect();
+    let mut retr = Vec::new();
+    for (idx, chunk) in encrypted.chunks(16).enumerate() {
+        if idx == 3 {
+            retr.extend(blobs[1]);
+        } else {
+            retr.extend(chunk);
+        }
+    }
+    retr
+}
+
+#[test]
+fn test_ecb_cutnpaste() {
+    let key = aes::generate_key();
+    let email = "AAAAAAAAAAadmin\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+    let data = profile_for(email);
+    println!("{:?}", data);
+    let encoded = encode(data);
+    println!("encoded {:?}", encoded);
+    let encrypted = aes::encrypt_ecb(encoded.as_bytes(), &key);
+    let attacked = attack(&encrypted);
+    let decrypted = aes::decrypt_ecb(&encrypted, &key);
+    println!("decrypted {:?}", text::bytes(&decrypted));
+    let decrypted_attacked = aes::decrypt_ecb(&attacked, &key);
+    let text_attacked = text::bytes(&decrypted_attacked);
+    println!("dec_attac {:?}", text_attacked);
+    println!("dec_attac {}", text_attacked);
+    let expected = "email=AAAAAAAAAAadmin\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}&uid=10&role=admin\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}";
+    assert_eq!(text_attacked, expected);
 }

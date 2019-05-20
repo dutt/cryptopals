@@ -106,7 +106,7 @@ pub fn generate_key() -> Vec<u8> {
 
 pub fn encrypt_with_rand_key(data : &[u8]) -> (String, Vec<u8>) {
     let mut rng = rand::thread_rng();
-    
+
     let prefix_padding = rng.gen_range(5, 10);
     let mut prefix = Vec::new();
     prefix.resize(prefix_padding, 4u8);
@@ -174,7 +174,7 @@ mod tests {
 	    let clearbytes = vec![1;32];
 	    let tenc = encrypt_cbc(&clearbytes, &key, &iv);
 	    let tdec = decrypt_cbc(&tenc, &key, &iv);
-	    assert_eq!(tdec, clearbytes);	
+	    assert_eq!(tdec, clearbytes);
 	}
 
 	#[test]
