@@ -21,16 +21,16 @@ pub fn guess_mode(data : &[u8]) -> String {
     String::from("cbc")
 }
 
-pub fn guess_blocksize(key : &[u8], postfix : &[u8]) -> usize {
+pub fn guess_blocksize(key : &[u8]) -> usize {
     let mut datastr = String::from("A");
     let data = Vec::new();
-    let encrypted = encrypt_with_postfix(&data, &key, &postfix);
+    let encrypted = aes::encrypt_ecb(&data, &key);
     let mut last_enc_size = encrypted.len();
     for i in 2..15 {
         for _ in 0..i {
             datastr.push('A');
             let data = datastr.as_bytes();
-            let encrypted = encrypt_with_postfix(&data, &key, &postfix);
+            let encrypted = aes::encrypt_ecb(&data, &key);
             if encrypted.len() != last_enc_size {
                 return encrypted.len() - last_enc_size
             }
@@ -40,7 +40,7 @@ pub fn guess_blocksize(key : &[u8], postfix : &[u8]) -> usize {
     0
 }
 
-pub fn check_prefix(prefix_size : usize, known : &[u8], 
+pub fn check_prefix(prefix_size : usize, known : &[u8],
                 key : &[u8], postfix : &[u8],
                 blocksize : usize) -> Option<u8> {
     let mut prefixstr = String::new();

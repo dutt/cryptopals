@@ -10,6 +10,7 @@ use rand::prelude::*;
 
 use super::xor;
 use super::pkcs7;
+use super::math;
 
 pub fn decrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     let key = GenericArray::clone_from_slice(key);
@@ -29,11 +30,15 @@ pub fn encrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     let cipher = Aes128::new(&key);
     let padded = pad_data(bytes);
     let mut encrypted : Vec<u8> = Vec::new();
+    //println!("encrypt_ecb:");
     for chunk in padded.chunks(16) {
+        //println!("  c {:?}", chunk);
         let mut block = GenericArray::clone_from_slice(chunk);
         cipher.encrypt_block(&mut block);
+        //println!("  m {:?}", block);
         encrypted.extend(block.iter());
-
+        //println!("current encrypted");
+        //println!("{:?}", encrypted);
     }
     encrypted
 }
@@ -48,17 +53,8 @@ pub fn is_ecb(bytes : &[u8]) -> (bool, usize, usize) {
     (chunks.len() != bytes.len() / 16, bytes.len() / 16, chunks.len())
 }
 
-fn find_nearest_16(len: usize) -> usize {
-	if len % 16 == 0 {
-		return len;
-	}
-	let rem = len / 16;
-	let retr = (rem+1) * 16;
-	retr
-}
-
 pub fn pad_data(bytes: &[u8]) -> Vec<u8> {
-	let new_len = find_nearest_16(bytes.len());
+	let new_len = math::find_nearest_16(bytes.len());
 	if new_len == bytes.len() {
 		Vec::from(bytes)
 	} else {
@@ -146,16 +142,6 @@ pub fn guess_mode(data : &[u8]) -> String {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn test_find_nearest_16() {
-		assert_eq!(16, find_nearest_16(1));
-		assert_eq!(16, find_nearest_16(15));
-		assert_eq!(16, find_nearest_16(16));
-
-		assert_eq!(32, find_nearest_16(31));
-		assert_eq!(32, find_nearest_16(32));
-	}
 
 	#[test]
 	fn test_ecb() {

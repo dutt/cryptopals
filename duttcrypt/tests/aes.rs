@@ -1,9 +1,15 @@
+use std::collections::HashMap;
 use std::fs;
+
+extern crate rand;
+use rand::prelude::*;
 
 use duttcrypt::base64;
 use duttcrypt::text;
 use duttcrypt::aes;
 use duttcrypt::aes_oracle;
+use duttcrypt::pkcs7;
+use duttcrypt::math;
 
 #[test]
 fn decrypt_aes_ecb() {
@@ -46,13 +52,13 @@ fn test_decrypt_cbc() {
 }
 
 #[test]
-fn test_ecb_oracle() {
+fn ch12_test_ecb_oracle() {
     let key = aes::generate_key();
     let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
     let postfix = base64::decode(postfixstr);
     let padded_postfix = aes::pad_data(&postfix);
 
-    let blocksize = aes_oracle::guess_blocksize(&key, &padded_postfix);
+    let blocksize = aes_oracle::guess_blocksize(&key);
     let data = vec![12;1024];
     let encrypted = aes_oracle::encrypt_with_postfix(&data, &key, &padded_postfix);
     let mode = aes::guess_mode(&encrypted);
@@ -142,7 +148,7 @@ fn attack(encrypted : &[u8]) -> Vec<u8> {
 }
 
 #[test]
-fn test_ecb_cutnpaste() {
+fn ch13_test_ecb_cutnpaste() {
     let key = aes::generate_key();
     let email = "AAAAAAAAAAadmin\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
     let data = profile_for(email);
@@ -159,4 +165,146 @@ fn test_ecb_cutnpaste() {
     println!("dec_attac {}", text_attacked);
     let expected = "email=AAAAAAAAAAadmin\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}&uid=10&role=admin\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}";
     assert_eq!(text_attacked, expected);
+}
+
+// Challenge 14
+
+pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize {
+    let mut datastr = String::from("A");
+    let mut data = Vec::new();
+    data.extend(prefix);
+    data.extend(postfix);
+    let encrypted = aes::encrypt_ecb(&data, &key);
+    let mut last_enc_size = encrypted.len();
+    for i in 1..15 {
+        for _ in 0..i {
+            datastr.push('A');
+            let mut data = Vec::new();
+            data.extend(prefix);
+            data.extend(datastr.as_bytes());
+            data.extend(postfix);
+            let encrypted = aes::encrypt_ecb(&data, &key);
+            if encrypted.len() != last_enc_size {
+                return datastr.len() - 1
+            }
+            last_enc_size = encrypted.len()
+        }
+    }
+    0
+}
+
+
+fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
+                 known : &[u8], all_known : &[u8],
+                 postfix: &[u8], key : &[u8], known_blocks : usize) -> Option<u8> {
+    let mut data = Vec::new();
+    data.extend(prefix);
+    for _ in 0..missing_count + byte_index {
+        data.push(0u8);
+    }
+    data.extend(postfix);
+    let padded = pkcs7::pad_bytes(&data, math::find_nearest_16(data.len()));
+    let mut encrypted = aes::encrypt_ecb(&padded, &key);
+
+    let mut oracle = HashMap::new();
+    let _arr = vec![10, 121, 98];
+    let mut start_offset = 16;
+
+    if known_blocks > 0 {
+        start_offset = 16 + known_blocks * 16;
+    }
+
+    for i in 0..255 {
+        let mut byte_data : Vec<u8> = Vec::new();
+        byte_data.extend(prefix);
+        let _count = math::find_nearest_16(prefix.len()) - prefix.len();
+
+        for _ in 0.._count {
+            byte_data.push(0u8);
+        }
+
+        byte_data.push(i);
+        byte_data.extend(known);
+        byte_data.extend(all_known);
+        let padded_byte_data = pkcs7::pad_bytes(&byte_data, math::find_nearest_16(byte_data.len()));
+        let mut enc = aes::encrypt_ecb(&padded_byte_data, &key);
+
+        let mut enc_block = enc.split_off(enc.len() - start_offset);
+
+        enc_block.split_off(16);
+
+        if oracle.contains_key(&enc_block) {
+            let val = oracle.get(&enc_block).unwrap();
+            panic!("i={} oracle already contains block, from i={}", i, val);
+        }
+        oracle.insert(enc_block, i);
+    }
+
+    let mut encrypted_block = encrypted.split_off(encrypted.len() - start_offset);
+    encrypted_block.split_off(16);
+
+    if oracle.contains_key(&encrypted_block) {
+        if let Some(val) = oracle.get(&encrypted_block) {
+            println!("found {}", val);
+            Some(*val)
+        }
+        else {
+            None
+        }
+    } else {
+        println!("Unknown encrypted block {:?}", encrypted_block);
+        None
+    }
+}
+
+#[test]
+fn ch14_test_tricky_ecb_decrypt() {
+    let key = aes::generate_key();
+
+    //prefix
+    let mut rng = rand::thread_rng();
+    let prefix_count : u8 = rng.gen_range(1,10);
+    let mut prefix = Vec::new();
+    prefix.resize(prefix_count as usize, 0);
+    rng.fill_bytes(&mut prefix);
+
+    //postfix
+    let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
+    let postfix = base64::decode(postfixstr);
+    let _padded_postfix = aes::pad_data(&postfix);
+    let blocksize = aes_oracle::guess_blocksize(&key);
+
+    // find how many to add t the next block
+    let missing = find_missing_count(&key, &prefix, &postfix);
+
+    let mut known : Vec<u8> = Vec::new();
+    let mut all_known = Vec::new();
+    let mut known_blocks = 0;
+    'outer: loop {
+        'inner: for byte_index in 0..blocksize {
+
+            let current_postfix = postfix.clone();
+            if known_blocks * blocksize > current_postfix.len() {
+                break 'outer;
+            }
+            if let Some(known_byte) = get_next_byte(&prefix, missing+1, byte_index, &known, &all_known,
+                                                    &postfix, &key, known_blocks) {
+                if known_byte == 0 {
+                    break;
+                }
+                known.insert(0, known_byte);
+            } else {
+                break 'outer;
+            }
+        }
+        known.reverse();
+        for c in known {
+            all_known.insert(0, c);
+        }
+        known = Vec::new();
+        known_blocks += 1;
+    }
+
+    let expected = vec![82, 111, 108, 108, 105, 110, 39, 32, 105, 110, 32, 109, 121, 32, 53, 46, 48, 10, 87, 105, 116, 104, 32, 109, 121, 32, 114, 97, 103, 45, 116, 111, 112, 32, 100, 111, 119, 110, 32, 115, 111, 32, 109, 121, 32, 104, 97, 105, 114, 32, 99, 97, 110, 32, 98, 108, 111, 119, 10, 84, 104, 101, 32, 103, 105, 114, 108, 105, 101, 115, 32, 111, 110, 32, 115, 116, 97, 110, 100, 98, 121, 32, 119, 97, 118, 105, 110, 103, 32, 106, 117, 115, 116, 32, 116, 111, 32, 115, 97, 121, 32, 104, 105, 10, 68, 105, 100, 32, 121, 111, 117, 32, 115, 116, 111, 112, 63, 32, 78, 111, 44, 32, 73, 32, 106, 117, 115, 116, 32, 100, 114, 111, 118, 101, 32, 98, 121, 10];
+    assert_eq!(all_known, expected);
 }

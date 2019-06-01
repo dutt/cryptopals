@@ -1,3 +1,4 @@
+pub mod math;
 pub mod xor;
 pub mod base64;
 pub mod hex;
