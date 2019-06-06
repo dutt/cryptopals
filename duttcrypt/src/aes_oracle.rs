@@ -40,6 +40,8 @@ pub fn guess_blocksize(key : &[u8]) -> usize {
     0
 }
 
+// Challenge 12
+
 pub fn check_prefix(prefix_size : usize, known : &[u8],
                 key : &[u8], postfix : &[u8],
                 blocksize : usize) -> Option<u8> {
