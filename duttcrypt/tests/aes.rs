@@ -308,3 +308,58 @@ fn ch14_test_tricky_ecb_decrypt() {
     let expected = vec![82, 111, 108, 108, 105, 110, 39, 32, 105, 110, 32, 109, 121, 32, 53, 46, 48, 10, 87, 105, 116, 104, 32, 109, 121, 32, 114, 97, 103, 45, 116, 111, 112, 32, 100, 111, 119, 110, 32, 115, 111, 32, 109, 121, 32, 104, 97, 105, 114, 32, 99, 97, 110, 32, 98, 108, 111, 119, 10, 84, 104, 101, 32, 103, 105, 114, 108, 105, 101, 115, 32, 111, 110, 32, 115, 116, 97, 110, 100, 98, 121, 32, 119, 97, 118, 105, 110, 103, 32, 106, 117, 115, 116, 32, 116, 111, 32, 115, 97, 121, 32, 104, 105, 10, 68, 105, 100, 32, 121, 111, 117, 32, 115, 116, 111, 112, 63, 32, 78, 111, 44, 32, 73, 32, 106, 117, 115, 116, 32, 100, 114, 111, 118, 101, 32, 98, 121, 10];
     assert_eq!(all_known, expected);
 }
+
+//
+// Challenge 16
+fn make_data(userdata : &str, key : &[u8]) -> Vec<u8> {
+    let mut encoded = String::from(userdata);
+    encoded = encoded.replace(";", "%3B").replace("=", "%3D");
+    let prefixstr = "comment1=cooking%20MCs;userdata=";
+    let prefix = prefixstr.as_bytes();
+    let postfixstr = ";comment2=%20like%20a%20pound%20of%20bacon";
+    let postfix = postfixstr.as_bytes();
+
+    let mut data = Vec::new();
+    data.extend(prefix);
+    data.extend(encoded.as_bytes());
+    data.extend(postfix);
+
+    let padded = aes::pad_data(&data);
+    aes::encrypt_cbc(&padded, key, &key)
+}
+
+fn check_admin(encrypted : &[u8], key : &[u8]) -> bool {
+    let padded_clearbytes = aes::decrypt_cbc(encrypted, key, key);
+    let clearbytes = pkcs7::strip(&padded_clearbytes);
+    let cleartext = text::bytes(&clearbytes);
+    let mut decoded  = String::from(cleartext);
+    decoded = decoded.replace("%3B",";").replace("%3D", "=").replace("%20", " ");
+    let parts = decoded.split(";");
+    for p in parts {
+        if p == "admin=true" {
+            return true
+        }
+    }
+    false
+}
+
+fn flip(data : &[u8]) -> Vec<u8> {
+    let xor = vec![2, 11, 0, 4, 11, 83, 0, 64, 72, 64, 9];
+    let mut retr = Vec::from(data);
+    for i in 49..(49+xor.len()) {
+        retr[i] ^= xor[i-49];
+    }
+    retr
+}
+
+#[test]
+fn ch16_modify_cleartext_via_ciphertext() {
+    let key = aes::generate_key();
+    let userdata = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    let data = make_data(userdata, &key);
+    let flipped = flip(&data);
+    let is_data_admin = check_admin(&data, &key);
+    let is_flipped_admin = check_admin(&flipped, &key);
+    assert_eq!(is_data_admin, false);
+    assert_eq!(is_flipped_admin, true);
+}
