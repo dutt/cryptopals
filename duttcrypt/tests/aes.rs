@@ -51,6 +51,40 @@ fn test_decrypt_cbc() {
     assert_eq!(&text[0..33], "I'm back and I'm ringin' the bell");
 }
 
+// Challenge 12
+
+pub fn check_prefix(prefix_size : usize, known : &[u8],
+                key : &[u8], postfix : &[u8],
+                blocksize : usize) -> Option<u8> {
+    let mut prefixstr = String::new();
+    for _ in 0..prefix_size {
+        prefixstr.push('A');
+    }
+    let prefix = Vec::from(prefixstr.as_bytes());
+    let mut oracle = HashMap::new();
+    for i in 0..255 {
+        let mut data : Vec<u8> = prefix.clone();
+        data.extend(known.iter());
+        data.push(i);
+        let mut encrypted = aes_oracle::encrypt_with_postfix(&data, &key, &postfix);
+        encrypted.split_off(blocksize);
+        oracle.insert(encrypted, i);
+    }
+
+    let mut encrypted = aes_oracle::encrypt_with_postfix(&prefix, &key, &postfix);
+    encrypted.split_off(blocksize);
+    if oracle.contains_key(&encrypted) {
+        if let Some(val) = oracle.get(&encrypted) {
+            Some(*val)
+        } else {
+            None
+        }
+    } else {
+        println!("unknown encrypted {:?}", encrypted);
+        None
+    }
+}
+
 #[test]
 fn ch12_test_ecb_oracle() {
     let key = aes::generate_key();
@@ -58,6 +92,7 @@ fn ch12_test_ecb_oracle() {
     let postfix = base64::decode(postfixstr);
     let padded_postfix = aes::pad_data(&postfix);
 
+    println!("padded_postfix {:?}", padded_postfix);
     let blocksize = aes_oracle::guess_blocksize(&key);
     let data = vec![12;1024];
     let encrypted = aes_oracle::encrypt_with_postfix(&data, &key, &padded_postfix);
@@ -70,20 +105,17 @@ fn ch12_test_ecb_oracle() {
     'outer: loop {
         'inner: for i in 1..16 {
             let count = blocksize - i;
-            let mut current_postfix = padded_postfix.clone();
-            if _known_blocks * 16 > current_postfix.len() {
+            if (all_known.len() + known.len()) >= padded_postfix.len() {
+                all_known.extend(known);
                 break 'outer;
             }
+            let mut current_postfix = padded_postfix.clone();
             current_postfix = current_postfix.split_off(_known_blocks * 15);
-            let maybe_known_byte = aes_oracle::check_prefix(count, &known, &key, &current_postfix, blocksize);
+            let maybe_known_byte = check_prefix(count, &known, &key, &current_postfix, blocksize);
             if let Some(known_byte) = maybe_known_byte {
-                if known_byte == 254 {
-                    break 'outer;
-                }
-                //assert_eq!(padded_postfix[known.len() + all_known.len()], known_byte);
                 known.push(known_byte);
-                print!(".");
             } else {
+                all_known.extend(known);
                 break 'outer;
             }
         }
@@ -91,10 +123,8 @@ fn ch12_test_ecb_oracle() {
         all_known.extend(known);
         known = Vec::new();
     }
-    while all_known[all_known.len() - 1] == 4 { //padding
-        all_known.pop();
-    }
-    assert_eq!(all_known, postfix);
+    let nopadding = pkcs7::strip(&all_known);
+    assert_eq!(nopadding, postfix);
 }
 
 // Challenge 13
