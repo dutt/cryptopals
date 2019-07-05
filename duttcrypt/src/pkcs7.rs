@@ -16,8 +16,11 @@ pub fn pad_bytes(bytes : &[u8], len : usize) -> Vec<u8> {
 
 pub fn validate(bytes : &[u8]) -> bool {
     let count = bytes[bytes.len()-1];
-    if count > 16 { // no padding
-        return true
+    if count == 0 {
+        return false;
+    }
+    if count > 16 {
+        return true;
     }
     let mut matches = 0;
     for bref in bytes.iter().rev() {
@@ -30,9 +33,6 @@ pub fn validate(bytes : &[u8]) -> bool {
         } else {
             return false;
         }
-        //if b.is_ascii_graphic() == false && b.is_ascii_whitespace() == false && b != count {
-        //    return false;
-        //}
     }
     true
 }

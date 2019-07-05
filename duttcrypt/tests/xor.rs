@@ -82,7 +82,7 @@ I go crazy when I hear a cymbal";
 fn break_xor_repeated() {
     let path = "6.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
-    let bytes = base64::decode(&content);
+    let bytes = base64::decode_str(&content);
     let result = xor::decrypt_bytes(&bytes);
     assert!(result.score >= 3515 and result.score <= 3525);
     assert_eq!(&result.text[0..33], "I'm back and I'm ringii' the bell");

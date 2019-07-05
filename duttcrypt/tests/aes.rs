@@ -15,7 +15,7 @@ use duttcrypt::math;
 fn decrypt_aes_ecb() {
     let path = "7.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
-    let bytes = base64::decode(&content);
+    let bytes = base64::decode_str(&content);
     let decrypted = aes::decrypt_ecb(&bytes, "YELLOW SUBMARINE".as_bytes());
     let clear = text::bytes(&decrypted);
     assert_eq!(&clear[0..33], "I'm back and I'm ringin' the bell");
@@ -45,7 +45,7 @@ fn test_decrypt_cbc() {
     let iv = vec![0;16];
     let path = "10.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
-    let bytes = base64::decode(&content);
+    let bytes = base64::decode_str(&content);
     let decrypted = aes::decrypt_cbc(&bytes, key, &iv);
     let text = text::bytes(&decrypted);
     assert_eq!(&text[0..33], "I'm back and I'm ringin' the bell");
@@ -89,7 +89,7 @@ pub fn check_prefix(prefix_size : usize, known : &[u8],
 fn ch12_test_ecb_oracle() {
     let key = aes::generate_key();
     let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
-    let postfix = base64::decode(postfixstr);
+    let postfix = base64::decode_str(postfixstr);
     let padded_postfix = aes::pad_data(&postfix);
 
     println!("padded_postfix {:?}", padded_postfix);
@@ -185,7 +185,8 @@ fn ch13_test_ecb_cutnpaste() {
     println!("{:?}", data);
     let encoded = encode(data);
     println!("encoded {:?}", encoded);
-    let encrypted = aes::encrypt_ecb(encoded.as_bytes(), &key);
+    let padded = aes::pad_data(encoded.as_bytes());
+    let encrypted = aes::encrypt_ecb(&padded, &key);
     let attacked = attack(&encrypted);
     let decrypted = aes::decrypt_ecb(&encrypted, &key);
     println!("decrypted {:?}", text::bytes(&decrypted));
@@ -204,7 +205,8 @@ pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize 
     let mut data = Vec::new();
     data.extend(prefix);
     data.extend(postfix);
-    let encrypted = aes::encrypt_ecb(&data, &key);
+    let padded = aes::pad_data(&data);
+    let encrypted = aes::encrypt_ecb(&padded, &key);
     let mut last_enc_size = encrypted.len();
     for i in 1..15 {
         for _ in 0..i {
@@ -213,14 +215,15 @@ pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize 
             data.extend(prefix);
             data.extend(datastr.as_bytes());
             data.extend(postfix);
-            let encrypted = aes::encrypt_ecb(&data, &key);
+            let padded = aes::pad_data(&data);
+            let encrypted = aes::encrypt_ecb(&padded, &key);
             if encrypted.len() != last_enc_size {
                 return datastr.len() - 1
             }
             last_enc_size = encrypted.len()
         }
     }
-    0
+    panic!("failed to find missing number of bytes");
 }
 
 
@@ -233,7 +236,8 @@ fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
         data.push(0u8);
     }
     data.extend(postfix);
-    let padded = pkcs7::pad_bytes(&data, math::find_nearest_16(data.len()));
+    //let padded = pkcs7::pad_bytes(&data, math::find_nearest_16(data.len()));
+    let padded = aes::pad_data(&data);
     let mut encrypted = aes::encrypt_ecb(&padded, &key);
 
     let mut oracle = HashMap::new();
@@ -256,8 +260,10 @@ fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
         byte_data.push(i);
         byte_data.extend(known);
         byte_data.extend(all_known);
-        let padded_byte_data = pkcs7::pad_bytes(&byte_data, math::find_nearest_16(byte_data.len()));
-        let mut enc = aes::encrypt_ecb(&padded_byte_data, &key);
+        //let padded_byte_data = pkcs7::pad_bytes(&byte_data, math::find_nearest_16(byte_data.len()));
+        //let padded_byte_data = aes::pad_data(&byte_data);
+        println!("byte_data {:?}", byte_data);
+        let mut enc = aes::encrypt_ecb(&byte_data, &key);
 
         let mut enc_block = enc.split_off(enc.len() - start_offset);
 
@@ -300,11 +306,11 @@ fn ch14_test_tricky_ecb_decrypt() {
 
     //postfix
     let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
-    let postfix = base64::decode(postfixstr);
-    let _padded_postfix = aes::pad_data(&postfix);
+    let postfix = base64::decode_str(postfixstr);
+    //let padded_postfix = aes::pad_data(&postfix);
     let blocksize = aes_oracle::guess_blocksize(&key);
 
-    // find how many to add t the next block
+    // find how many to add to the next block
     let missing = find_missing_count(&key, &prefix, &postfix);
 
     let mut known : Vec<u8> = Vec::new();

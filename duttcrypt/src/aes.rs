@@ -26,12 +26,14 @@ pub fn decrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
 }
 
 pub fn encrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
+    if bytes.len() % 16 != 0 {
+        panic!("encryp_cbc needs buffers with sized a multiple of 16");
+    }
     let key = GenericArray::clone_from_slice(key);
     let cipher = Aes128::new(&key);
-    let padded = pad_data(bytes);
     let mut encrypted : Vec<u8> = Vec::new();
     //println!("encrypt_ecb:");
-    for chunk in padded.chunks(16) {
+    for chunk in bytes.chunks(16) {
         //println!("  c {:?}", chunk);
         let mut block = GenericArray::clone_from_slice(chunk);
         cipher.encrypt_block(&mut block);
@@ -54,12 +56,11 @@ pub fn is_ecb(bytes : &[u8]) -> (bool, usize, usize) {
 }
 
 pub fn pad_data(bytes: &[u8]) -> Vec<u8> {
-	let new_len = math::find_nearest_16(bytes.len());
+	let mut new_len = math::find_nearest_16(bytes.len());
 	if new_len == bytes.len() {
-		Vec::from(bytes)
-	} else {
-		pkcs7::pad_bytes(bytes, new_len)
+        new_len += 16;
 	}
+	pkcs7::pad_bytes(bytes, new_len)
 }
 
 pub fn decrypt_cbc(bytes: &[u8], key: &[u8], iv : &[u8]) -> Vec<u8> {
@@ -78,12 +79,17 @@ pub fn decrypt_cbc(bytes: &[u8], key: &[u8], iv : &[u8]) -> Vec<u8> {
 }
 
 pub fn encrypt_cbc(bytes: &[u8], key: &[u8], iv : &[u8]) -> Vec<u8> {
+    if bytes.len() % 16 != 0 {
+        panic!("encryp_cbc needs buffers with sized a multiple of 16");
+    }
+    if iv.len() != 16 {
+        panic!("encryp_cbc needs IV with a size of 16");
+    }
     let key = GenericArray::clone_from_slice(key);
     let cipher = Aes128::new(&key);
     let mut encrypted : Vec<u8> = Vec::new();
     let mut last_block = Vec::from(iv);
-    let padded = pad_data(bytes);
-    for chunk in padded.chunks(16) {
+    for chunk in bytes.chunks(16) {
         let xored = xor::xor_bytes(chunk, &last_block);
         let mut block = GenericArray::clone_from_slice(&xored);
         cipher.encrypt_block(&mut block);
@@ -117,12 +123,15 @@ pub fn encrypt_with_rand_key(data : &[u8]) -> (String, Vec<u8>) {
     let mut full_data = Vec::from(prefix);
     full_data.extend(data);
     full_data.extend(postfix);
+
+    let padded = pad_data(&full_data);
+
     let use_ebc = rng.gen::<bool>();
     if use_ebc {
-        (String::from("ecb"), encrypt_ecb(&full_data, &key))
+        (String::from("ecb"), encrypt_ecb(&padded, &key))
     } else {
         let iv = generate_key();
-        (String::from("cbc"), encrypt_cbc(&full_data, &key, &iv))
+        (String::from("cbc"), encrypt_cbc(&padded, &key, &iv))
     }
 }
 
@@ -155,12 +164,11 @@ mod tests {
 	#[test]
 	fn test_cbc() {
 	    let key = "YELLOW SUBMARINE".as_bytes();
-	    let iv = vec![2;32];
-
-	    let clearbytes = vec![1;32];
-	    let tenc = encrypt_cbc(&clearbytes, &key, &iv);
+	    let iv = vec![2;16];
+	    let raw = vec![1;32];
+	    let tenc = encrypt_cbc(&raw, &key, &iv);
 	    let tdec = decrypt_cbc(&tenc, &key, &iv);
-	    assert_eq!(tdec, clearbytes);
+	    assert_eq!(tdec, raw);
 	}
 
 	#[test]
