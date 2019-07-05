@@ -218,7 +218,7 @@ pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize 
             let padded = aes::pad_data(&data);
             let encrypted = aes::encrypt_ecb(&padded, &key);
             if encrypted.len() != last_enc_size {
-                return datastr.len() - 1
+                return datastr.len()
             }
             last_enc_size = encrypted.len()
         }
@@ -226,6 +226,18 @@ pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize 
     panic!("failed to find missing number of bytes");
 }
 
+//added after refactoring issues
+#[test]
+fn test_find_missing_count() {
+    let key = aes::generate_key();
+    let prefix = vec![1,1,1];
+    let postfix = vec![2,2,2];
+    assert_eq!(find_missing_count(&key, &prefix, &postfix), 10);
+
+    let prefix = vec![1;16];
+    let postfix = vec![2;4];
+    assert_eq!(find_missing_count(&key, &prefix, &postfix), 12);
+}
 
 fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
                  known : &[u8], all_known : &[u8],
@@ -236,8 +248,9 @@ fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
         data.push(0u8);
     }
     data.extend(postfix);
-    //let padded = pkcs7::pad_bytes(&data, math::find_nearest_16(data.len()));
-    let padded = aes::pad_data(&data);
+    let padded = pkcs7::pad_bytes(&data, math::find_nearest_16(data.len()));
+    //let padded = aes::pad_data(&data);
+    println!("padded {:?}", padded);
     let mut encrypted = aes::encrypt_ecb(&padded, &key);
 
     let mut oracle = HashMap::new();
@@ -260,10 +273,10 @@ fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
         byte_data.push(i);
         byte_data.extend(known);
         byte_data.extend(all_known);
-        //let padded_byte_data = pkcs7::pad_bytes(&byte_data, math::find_nearest_16(byte_data.len()));
+        let padded_byte_data = pkcs7::pad_bytes(&byte_data, math::find_nearest_16(byte_data.len()));
         //let padded_byte_data = aes::pad_data(&byte_data);
-        println!("byte_data {:?}", byte_data);
-        let mut enc = aes::encrypt_ecb(&byte_data, &key);
+        //println!("byte_data {:?}", byte_data);
+        let mut enc = aes::encrypt_ecb(&padded_byte_data, &key);
 
         let mut enc_block = enc.split_off(enc.len() - start_offset);
 
@@ -398,4 +411,120 @@ fn ch16_modify_cleartext_via_ciphertext() {
     let is_flipped_admin = check_admin(&flipped, &key);
     assert_eq!(is_data_admin, false);
     assert_eq!(is_flipped_admin, true);
+}
+
+// Ch 17
+
+fn produce_session(key : &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let lines = vec!["MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc=",
+                     "MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic=",
+                     "MDAwMDAyUXVpY2sgdG8gdGhlIHBvaW50LCB0byB0aGUgcG9pbnQsIG5vIGZha2luZw==",
+                     "MDAwMDAzQ29va2luZyBNQydzIGxpa2UgYSBwb3VuZCBvZiBiYWNvbg==",
+                     "MDAwMDA0QnVybmluZyAnZW0sIGlmIHlvdSBhaW4ndCBxdWljayBhbmQgbmltYmxl",
+                     "MDAwMDA1SSBnbyBjcmF6eSB3aGVuIEkgaGVhciBhIGN5bWJhbA==",
+                     "MDAwMDA2QW5kIGEgaGlnaCBoYXQgd2l0aCBhIHNvdXBlZCB1cCB0ZW1wbw==",
+                     "MDAwMDA3SSdtIG9uIGEgcm9sbCwgaXQncyB0aW1lIHRvIGdvIHNvbG8=",
+                     "MDAwMDA4b2xsaW4nIGluIG15IGZpdmUgcG9pbnQgb2g=",
+                     "MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG9"];
+    let mut rng = rand::thread_rng();
+    let line = lines.choose(&mut rng).unwrap().as_bytes();
+    let mut iv = vec![0;16];
+    rng.fill_bytes(&mut iv);
+    let padded_line = aes::pad_data(line);
+    let ciphertext = aes::encrypt_cbc(&padded_line, key, &iv);
+    (Vec::from(line), ciphertext, iv)
+}
+
+fn check_session(ciphertext : &[u8], key : &[u8], iv : &[u8]) -> bool {
+    let cleartext = aes::decrypt_cbc(ciphertext, key, iv);
+    pkcs7::validate(&cleartext)
+}
+
+fn decode_block(prev_block : &Vec<u8>, block : &Vec<u8>,
+                key : &[u8], iv : &[u8]) -> Vec<u8> {
+    let mut known = HashMap::new();
+    'outer : for byte_index in (0..16).rev() {
+        //println!("byte_index {:?}", byte_index);
+        let padding_value = 16u8 - byte_index as u8;
+        //println!("padding_value {:?}", padding_value);
+        'inner : for i in 0..256u16 {
+            let iu = i as u8;
+            let orig = prev_block[byte_index];
+            let attempt = iu ^ padding_value as u8;
+            let mut data = prev_block.clone();
+            for pad_idx in (byte_index+1..16).rev() {
+                let (_, prev_i) = known.get(&pad_idx).unwrap();
+                let newval = prev_i ^ padding_value as u8;
+                //println!("prev_val {:?}, prev_i {}, padding_value {}", prev_val, prev_i, padding_value);
+                //println!("{:?} to padding {}", pad_idx, newval);
+                data[pad_idx] = newval;
+            }
+            data[byte_index] = attempt;
+            let mut full = Vec::new();
+            //println!("data for {}:", i);
+            //for c in &data {
+            //    println!("{:?}", c);
+            //    full.extend(c);
+            //}
+            full.extend(data);
+            full.extend(block.iter());
+
+            if check_session(&full, &key, &iv) {
+                let val = iu ^ orig;
+                println!("known[{:?}] = {}", byte_index, val);
+                if known.contains_key(&byte_index) {
+                    let (oldval, _) = known.get(&byte_index).unwrap();
+                    if *oldval == padding_value as u8 {
+                        println!("replacing old value for byte {:?} = ({},{})", byte_index, val, iu);
+                        known.insert(byte_index, (val, iu));
+                    }
+                    continue 'outer;
+                } else {
+                    known.insert(byte_index, (val, iu));
+                }
+            }
+        }
+        if known.contains_key(&byte_index) == false {
+            panic!("value for byte {} not found", byte_index);
+        }
+    }
+    let mut blockdata = Vec::new();
+    for i in (0..15).rev() {
+        let (val, _) = known.get(&i).unwrap();
+        blockdata.push(*val);
+    }
+    blockdata
+}
+
+#[test]
+fn ch17_cbc_padding_oracle() {
+    let key = aes::generate_key();
+    let (cleartext, ciphertext, iv) = produce_session(&key);
+    let mut chunks = Vec::new();
+    for chunk in ciphertext.chunks(16) {
+        chunks.push(Vec::from(chunk));
+    }
+    println!("chunks pre");
+    for chunk in &chunks {
+        println!("{:?}", chunk);
+    }
+
+    let len = chunks.len();
+    let mut all_known = Vec::new();
+    for chunk_index in (1..len).rev() {
+        let known = decode_block(&chunks[chunk_index-1], &chunks[chunk_index], &key, &iv);
+        for k in known {
+            all_known.insert(0, k);
+        }
+    }
+    let last_known = decode_block(&iv, &chunks[0], &key, &iv);
+    for k in last_known {
+        all_known.insert(0, k);
+    }
+
+    println!("all_known {:?}", all_known);
+    let stripped = pkcs7::strip(&all_known);
+    let text = text::bytes(&stripped);
+    println!("all_known {}", text);
+    assert_eq!(cleartext, stripped);
 }

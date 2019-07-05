@@ -35,7 +35,7 @@ pub fn encode(bytes : &[u8]) -> String {
     retr
 }
 
-pub fn decode(data : Vec<u8>) -> Vec<u8> {
+pub fn decode(data : &[u8]) -> Vec<u8> {
     let mut clear = Vec::new();
     let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     let chars : Vec<_> = data.iter().map(|x| alphabet.find(*x as char).unwrap() as u8).collect();
@@ -76,43 +76,7 @@ pub fn decode(data : Vec<u8>) -> Vec<u8> {
 
 pub fn decode_str(b64text: &str) -> Vec<u8> {
     let data = Vec::from(b64text.as_bytes());
-    decode(data)
-    //let mut clear = Vec::new();
-    //let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    //let chars : Vec<_> = b64text.chars().map(|x| alphabet.find(x).unwrap() as u8).collect();
-    //for chunk in chars.chunks(4) {
-    //    let mut a = (chunk[0] as u16) << 2;
-    //    let a2 = (chunk[1] as u16) & 0b110000;
-    //    let a2 = a2 >> 4;
-    //    a = a | a2;
-    //    clear.push(a as u8);
-    //
-    //    let b_masked = (chunk[1] & 0b001111) as u16;
-    //    let mut b = b_masked << 4;
-    //    if let Some(chunk2) = chunk.get(2) {
-    //        if *chunk2 != 64 { // third character not padding
-    //            b = b | (chunk2 >> 2) as u16;
-    //            clear.push(b as u8);
-    //
-    //            let mut c = (chunk2 & 0b11) << 6;
-    //            if let Some(chunk3) = chunk.get(3) {
-    //                if *chunk3 != 64 { //fourth character not padding
-    //                    c = c | chunk3;
-    //                    clear.push(c as u8);
-    //                } else if c != 0{ //fourth character is padding
-    //                    clear.push(c as u8);
-    //                }
-    //            } else if c != 0 { //no fourth character
-    //                clear.push(c as u8);
-    //            }
-    //        } else if b != 0 { //third character is padding
-    //            clear.push(b as u8);
-    //        }
-    //    } else if b != 0 { //no third character
-    //        clear.push(b as u8);
-    //    }
-    //}
-    //clear
+    decode(&data)
 }
 
 #[cfg(test)]

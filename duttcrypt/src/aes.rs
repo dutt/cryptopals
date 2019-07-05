@@ -32,15 +32,20 @@ pub fn encrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     let key = GenericArray::clone_from_slice(key);
     let cipher = Aes128::new(&key);
     let mut encrypted : Vec<u8> = Vec::new();
-    //println!("encrypt_ecb:");
+    println!("encrypt_ecb:");
+    println!(" cleartext:");
     for chunk in bytes.chunks(16) {
-        //println!("  c {:?}", chunk);
+        println!("  {:?}", chunk);
         let mut block = GenericArray::clone_from_slice(chunk);
         cipher.encrypt_block(&mut block);
-        //println!("  m {:?}", block);
+        //println!("  enc {:?}", block);
         encrypted.extend(block.iter());
         //println!("current encrypted");
         //println!("{:?}", encrypted);
+    }
+    println!(" encrypted:");
+    for chunk in encrypted.chunks(16) {
+        println!("   {:?}", chunk);
     }
     encrypted
 }

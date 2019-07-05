@@ -19,9 +19,6 @@ pub fn validate(bytes : &[u8]) -> bool {
     if count == 0 {
         return false;
     }
-    if count > 16 {
-        return true;
-    }
     let mut matches = 0;
     for bref in bytes.iter().rev() {
         let b : u8 = *bref;
