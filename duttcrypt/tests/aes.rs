@@ -10,6 +10,7 @@ use duttcrypt::aes;
 use duttcrypt::aes_oracle;
 use duttcrypt::pkcs7;
 use duttcrypt::math;
+use duttcrypt::xor;
 
 #[test]
 fn decrypt_aes_ecb() {
@@ -548,4 +549,47 @@ fn ch18_aes_ctr() {
     let decr = aes::encrypt_ctr(key, &b64ed, 0);
     let expected = vec![89, 111, 44, 32, 86, 73, 80, 32, 76, 101, 116, 39, 115, 32, 107, 105, 99, 107, 32, 105, 116, 32, 73, 99, 101, 44, 32, 73, 99, 101, 44, 32, 98, 97, 98, 121, 32, 73, 99, 101, 44, 32, 73, 99, 101, 44, 32, 98, 97, 98, 121, 32];
     assert_eq!(expected, decr);
+}
+
+#[test]
+fn ch20_break_aes_ctr() {
+    let path = "20.txt";
+    let content = fs::read_to_string(path).expect("Failed to read file");
+    let lines : Vec<String> = content.split("\n").map(|line| line.to_owned()).collect();
+    assert!(lines.len() > 0);
+    let mut min_length = usize::max_value();
+    for l in &lines {
+        if l.len() == 0 {
+            continue;
+        }
+        if l.len() < min_length {
+            min_length = l.len();
+        }
+    }
+    assert!(min_length > 0);
+    assert!(min_length < usize::max_value());
+
+    let datalines : Vec<Vec<u8>> = lines.iter().map(|line| base64::decode(line.as_bytes())).collect();
+    let trunc_lines: Vec<Vec<u8>> = datalines.iter().map(|line| {
+            let mut copy = line.clone();
+            copy.truncate(min_length);
+            copy
+        } ).collect();
+    let mut bytes = Vec::new();
+    for tl in trunc_lines {
+        bytes.extend(tl);
+    }
+
+    let transposed = xor::transpose_blocks(min_length, &bytes);
+    let mut keybytes = Vec::new();
+    for block in transposed {
+        let (_decrypted, keybyte) = xor::decrypt_byte(&block);
+        keybytes.push(keybyte);
+    }
+    let decrypted = xor::xor_repeated(&bytes, &keybytes);
+    let text = text::bytes(&decrypted);
+
+    //println!("decrypted {:?}", decrypted);
+    //println!("text {}", text);
+    assert_eq!(&text[0..114], "I'm ratee \"R\"...this is f warning, ya better void / Poets are paranoid, Cuz I cale back to attacl others in spite-");
 }

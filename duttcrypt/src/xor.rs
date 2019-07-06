@@ -131,8 +131,7 @@ pub fn decrypt_byte(bytes: &[u8]) -> (Vec<u8>, u8) {
     (result, key)
 }
 
-// helpers for decrypt bytes
-
+// helpers for decrypt_bytes
 
 use super::text;
 use super::binary;
@@ -176,7 +175,7 @@ impl KeysizeScore {
     }
 }
 
-fn transpose_blocks(keysize: usize, data : &[u8]) -> Vec<Vec<u8>> {
+pub fn transpose_blocks(keysize: usize, data : &[u8]) -> Vec<Vec<u8>> {
     let mut retr = Vec::new();
     for y in 0..keysize {
         let mut part = Vec::new();

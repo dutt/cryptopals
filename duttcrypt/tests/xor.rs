@@ -37,7 +37,7 @@ fn runxor(l : String) -> (String, Vec<u8>, i32) {
 }
 
 #[test]
-fn run4() {
+fn ch6_threaded_break_repeat_key_xor() {
     let path = "4.txt";
     let content = fs::read_to_string(path).expect("Failed to read file");
     let lines : Vec<String> = content.split('\n').map(|line| line.to_owned()).collect();
@@ -65,7 +65,7 @@ fn run4() {
 }
 
 #[test]
-fn xor_repeated() {
+fn ch5_xor_repeated() {
     let text = "Burning 'em, if you ain't quick and nimble
 I go crazy when I hear a cymbal";
     let bytes = text.as_bytes();
@@ -79,7 +79,7 @@ I go crazy when I hear a cymbal";
 }
 
 #[test]
-fn break_xor_repeated() {
+fn ch6_break_xor_repeated() {
     let path = "6.txt";
     let content = fs::read_to_string(path).expect("Failed to read file").replace("\n","");
     let bytes = base64::decode_str(&content);
