@@ -489,10 +489,11 @@ fn decode_block(prev_block : &Vec<u8>, block : &Vec<u8>,
         }
     }
     let mut blockdata = Vec::new();
-    for i in (0..15).rev() {
+    for i in (0..16).rev() {
         let (val, _) = known.get(&i).unwrap();
         blockdata.push(*val);
     }
+    assert_eq!(blockdata.len(), 16);
     blockdata
 }
 
