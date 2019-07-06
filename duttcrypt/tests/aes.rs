@@ -201,7 +201,7 @@ fn ch13_test_ecb_cutnpaste() {
 // Challenge 14
 
 pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize {
-    let mut datastr = String::from("A");
+    let mut datastr = String::from("");
     let mut data = Vec::new();
     data.extend(prefix);
     data.extend(postfix);
@@ -226,7 +226,7 @@ pub fn find_missing_count(key : &[u8], prefix : &[u8], postfix: &[u8]) -> usize 
     panic!("failed to find missing number of bytes");
 }
 
-//added after refactoring issues
+//tests added after refactoring issues...
 #[test]
 fn test_find_missing_count() {
     let key = aes::generate_key();
@@ -237,6 +237,13 @@ fn test_find_missing_count() {
     let prefix = vec![1;16];
     let postfix = vec![2;4];
     assert_eq!(find_missing_count(&key, &prefix, &postfix), 12);
+
+    let prefix = vec![55, 145, 74];
+    let postfix = vec![82, 111, 108, 108, 105, 110, 39, 32, 105, 110, 32, 109, 121, 32, 53, 46, 48, 10, 87, 105, 116, 104, 32, 109, 121, 32, 114, 97, 103, 45, 116, 111, 112, 32, 100, 111, 119, 110, 32, 115, 111, 32, 109, 121, 32, 104, 97, 105, 114, 32, 99, 97, 110, 32, 98, 108, 111, 119, 10, 84, 104, 101, 32, 103, 105, 114, 108, 105, 101, 115, 32, 111, 110, 32, 115, 116, 97, 110, 100, 98, 121, 32, 119, 97, 118, 105, 110, 103, 32, 106, 117, 115, 116, 32, 116, 111, 32, 115, 97, 121, 32, 104, 105, 10, 68, 105, 100, 32, 121, 111, 117, 32, 115, 116, 111, 112, 63, 32, 78, 111, 44, 32, 73, 32, 106, 117, 115, 116, 32, 100, 114, 111, 118, 101, 32, 98, 121, 10];
+    assert_eq!(find_missing_count(&key, &prefix, &postfix), 3);
+
+    let prefix = vec![36, 234, 81, 243, 196];
+    assert_eq!(find_missing_count(&key, &prefix, &postfix), 1);
 }
 
 fn get_next_byte(prefix : &[u8], missing_count : usize, byte_index : usize,
@@ -316,10 +323,13 @@ fn ch14_test_tricky_ecb_decrypt() {
     let mut prefix = Vec::new();
     prefix.resize(prefix_count as usize, 0);
     rng.fill_bytes(&mut prefix);
+    println!("prefix({}) {:?}", prefix.len(), prefix);
 
     //postfix
     let postfixstr = "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK";
     let postfix = base64::decode_str(postfixstr);
+    println!("postfix({}) {:?}", postfix.len(), postfix);
+
     //let padded_postfix = aes::pad_data(&postfix);
     let blocksize = aes_oracle::guess_blocksize(&key);
 
