@@ -82,7 +82,6 @@ mod tests {
 
     #[test]
     fn ch15_test_validate() {
-        assert!(validate("YELLOW SUBMARINE".as_bytes()));
         assert!(validate("YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes()));
         assert!(validate("YELLOW SUBMARIN\x01".as_bytes()));
         assert!(validate("YELLOW SUBMARI\x02\x02".as_bytes()));
@@ -91,6 +90,8 @@ mod tests {
         assert!(validate("YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes()));
         assert!(validate("YELLOW SUBMARINE\x03\x03".as_bytes()) == false);
         assert!(validate("YELLOW SUBMARINE\x01\x02\x03\x04".as_bytes()) == false);
+        // no padding is invalid padding
+        assert!(validate("YELLOW SUBMARINE".as_bytes()) == false);
     }
 
     #[test]

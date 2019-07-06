@@ -529,3 +529,13 @@ fn ch17_cbc_padding_oracle() {
     println!("all_known {}", text);
     assert_eq!(cleartext, stripped);
 }
+
+#[test]
+fn ch18_aes_ctr() {
+    let key = "YELLOW SUBMARINE".as_bytes();
+    let text = "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==".as_bytes();
+    let b64ed = base64::decode(text);
+    let decr = aes::encrypt_ctr(key, &b64ed, 0);
+    let expected = vec![89, 111, 44, 32, 86, 73, 80, 32, 76, 101, 116, 39, 115, 32, 107, 105, 99, 107, 32, 105, 116, 32, 73, 99, 101, 44, 32, 73, 99, 101, 44, 32, 98, 97, 98, 121, 32, 73, 99, 101, 44, 32, 73, 99, 101, 44, 32, 98, 97, 98, 121, 32];
+    assert_eq!(expected, decr);
+}

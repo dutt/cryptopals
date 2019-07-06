@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 extern crate aes;
 use aes::block_cipher_trait::generic_array::GenericArray;
+use aes::block_cipher_trait::generic_array::typenum::U16;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes128;
 
@@ -32,8 +33,8 @@ pub fn encrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     let key = GenericArray::clone_from_slice(key);
     let cipher = Aes128::new(&key);
     let mut encrypted : Vec<u8> = Vec::new();
-    println!("encrypt_ecb:");
-    println!(" cleartext:");
+    //println!("encrypt_ecb:");
+    //println!(" cleartext:");
     for chunk in bytes.chunks(16) {
         println!("  {:?}", chunk);
         let mut block = GenericArray::clone_from_slice(chunk);
@@ -43,10 +44,10 @@ pub fn encrypt_ecb(bytes: &[u8], key: &[u8]) -> Vec<u8> {
         //println!("current encrypted");
         //println!("{:?}", encrypted);
     }
-    println!(" encrypted:");
-    for chunk in encrypted.chunks(16) {
-        println!("   {:?}", chunk);
-    }
+    //println!(" encrypted:");
+    //for chunk in encrypted.chunks(16) {
+    //    println!("   {:?}", chunk);
+    //}
     encrypted
 }
 
@@ -153,9 +154,52 @@ pub fn guess_mode(data : &[u8]) -> String {
     String::from("cbc")
 }
 
+pub fn encrypt_ctr(key : &[u8], data : &[u8], nonce : u64) -> Vec<u8> {
+    if key.len() != 16 {
+        panic!("encrypt_ctr::key len must be 16 long, len was {}", key.len());
+    }
+    let key = GenericArray::clone_from_slice(key);
+    let cipher = Aes128::new(&key);
+    let mut encrypted : Vec<u8> = Vec::new();
+    let mut remaining = -1i16;
+    let mut block_count = 0;
+
+    //blocksource is just because I can't figure out how to create an
+    // empty GenericArray of the right type...
+    let blocksource = vec![1;16];
+    let mut block : GenericArray<u8, U16> = GenericArray::clone_from_slice(&blocksource);
+
+    for d in data.iter() {
+        if remaining < 0 {
+            let mut data : Vec<u8> = Vec::new();
+            data.extend(nonce.to_le_bytes().iter());
+            let counter = block_count as u64;
+            data.extend(counter.to_le_bytes().iter());
+            assert_eq!(data.len(), 16);
+            //println!("data {:?}", data);
+            block = GenericArray::clone_from_slice(&data);
+            cipher.encrypt_block(&mut block);
+            remaining = 15;
+            block_count += 1;
+        }
+        encrypted.push(d ^ block[15-remaining as usize]);
+        remaining -= 1;
+    }
+    encrypted
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+    #[test]
+    fn test_ctr_simple() {
+        let data = "abcdefg".as_bytes();
+        let key = "YELLOW SUBMARINE".as_bytes();
+        let encrypted = encrypt_ctr(key, data, 0);
+        let decrypted = encrypt_ctr(key, &encrypted, 0);
+        assert_eq!(decrypted, data);
+    }
 
 	#[test]
 	fn test_ecb() {
