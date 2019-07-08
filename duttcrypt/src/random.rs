@@ -51,6 +51,12 @@ impl MersenneTwister {
         }
     }
 
+    pub fn from_seed(seed : u32) -> MersenneTwister {
+        let mut mt = MersenneTwister::new();
+        mt.seed(seed);
+        mt
+    }
+
     /*
      function seed_mt(int seed) {
          index := n
@@ -68,11 +74,9 @@ impl MersenneTwister {
         self.index = CONSTANTS.n;
         self.mt[0] = seed;
         for i in 1..(CONSTANTS.n) {
-            self.mt[i] = 0xFFFFFFFF &
-                            (u32::overflowing_mul(CONSTANTS.f,
-                                 self.mt[i-1] ^
-                                (self.mt[i-1] >> (CONSTANTS.w - 2))).0
-                            + i as u32);
+            self.mt[i] = CONSTANTS.f.wrapping_mul(self.mt[i-1] ^
+                                                 (self.mt[i-1] >> (CONSTANTS.w - 2))).
+                                     wrapping_add(i as u32);
         }
     }
 
@@ -102,11 +106,6 @@ impl MersenneTwister {
         let y4 = y3 ^ ((y3 << CONSTANTS.t) & CONSTANTS.c);
         let y5 = y4 ^ (y4 >> CONSTANTS.l);
         self.index += 1;
-        //println!("y1 {} y1bin {:0>32b}", y1, y1);
-        //println!("y2 {} y2bin {:0>32b}", y2, y2);
-        //println!("y3 {} y3bin {:0>32b}", y3, y3);
-        //println!("y4 {} y4bin {:0>32b}", y4, y4);
-        //println!("y5 {} y5bin {:0>32b}", y5, y5);
         y5 & 0xFFFFFFFF
     }
     /*
@@ -140,13 +139,8 @@ fn untemper_rs(val : u32, shift_by : u32) -> u32 {
     let mut retr = val;
     let mut tmp = val;
     for _i in 0..=32 / shift_by {
-        //println!("i {:?} parts {}", _i, 32 / shift_by);
-        //println!("tmp {} tmpbin {:0>32b}", tmp, tmp);
         tmp >>= shift_by;
-        //println!("shifted tmp {} stmpbin {:0>32b}", tmp, tmp);
-        //println!("retr {} retrbin {:0>32b}", retr, retr);
         retr ^= tmp;
-        //println!("xored retr {} retrbin {:0>32b}", retr, retr);
     }
     retr
 }
@@ -159,23 +153,30 @@ fn untemper_lsa(val : u32, shift_by : u32, and_with : u32) -> u32 {
 }
 
 pub fn untemper(y : u32) -> u32 {
-    // println!("\ny {} ybin {:0>32b}\n", y, y);
-
-    // y4 := y3 xor (y3 >> l)
     let y3 = untemper_rs(y, CONSTANTS.l);
-    // println!("xy3 {:?} xy3 {:0>32b}", y3, y3);
-
-    // y3 := y2 xor ((y2 << t) and c)
     let y2 = untemper_lsa(y3, CONSTANTS.t, CONSTANTS.c);
-    // println!("xy2 {:?} xy2 {:0>32b}", y2, y2);
-
-    // y2 := y1 xor ((y1 << s) and b)
     let y1 = untemper_lsa(y2, CONSTANTS.s, CONSTANTS.b);
-    // println!("xy1 {:?} xy1 {:0>32b}", y1, y1);
-
-    // y1 := y0 xor ((y0 >> u) and d)
     let y0 = untemper_rs(y1, CONSTANTS.u);
-    // println!("xy0 {:?} xy0 {:0>32b}", y0, y0);
-
     y0
+}
+
+pub fn encrypt_mt19937(data : &[u8], seed : u16) -> Vec<u8> {
+    let mut randombytes = Vec::new();
+    let mut encrypted : Vec<u8> = Vec::new();
+    let mut rnd = MersenneTwister::from_seed(seed as u32);
+
+    for d in data.iter() {
+        if randombytes.len() == 0 {
+            let rndval = rnd.gen();
+            for byteindex in 0..4 {
+                let mut v = 0xFF;
+                v <<= byteindex * 8;
+                let mut byteval = rndval & v;
+                byteval >>= byteindex * 8;
+                randombytes.push(byteval as u8);
+            }
+        }
+        encrypted.push(d ^ randombytes.pop().unwrap());
+    }
+    encrypted
 }
