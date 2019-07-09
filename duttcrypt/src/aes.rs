@@ -230,3 +230,43 @@ mod tests {
 	    }
 	}
 }
+
+pub fn edit_ctr(ciphertext : &[u8], key : &[u8], nonce : u64, offset : usize, newtext : &[u8]) -> Vec<u8> {
+    if key.len() != 16 {
+        panic!("encrypt_ctr::key len must be 16 long, len was {}", key.len());
+    }
+    let key = GenericArray::clone_from_slice(key);
+    let cipher = Aes128::new(&key);
+    let mut encrypted : Vec<u8> = Vec::new();
+    let mut remaining = -1i16;
+    let mut block_count = 0;
+
+    //blocksource is just because I can't figure out how to create an
+    // empty GenericArray of the right type...
+    let blocksource = vec![1;16];
+    let mut block : GenericArray<u8, U16> = GenericArray::clone_from_slice(&blocksource);
+
+    for (idx, d) in ciphertext.iter().enumerate() {
+        if remaining < 0 {
+            let mut data : Vec<u8> = Vec::new();
+            data.extend(nonce.to_le_bytes().iter());
+            let counter = block_count as u64;
+            data.extend(counter.to_le_bytes().iter());
+            assert_eq!(data.len(), 16);
+            //println!("data {:?}", data);
+            block = GenericArray::clone_from_slice(&data);
+            cipher.encrypt_block(&mut block);
+            remaining = 15;
+            block_count += 1;
+        }
+        if idx >= offset && idx < offset + newtext.len() {
+            //println!("byte {} is new, byte {} in new", idx, idx - offset);
+            encrypted.push(newtext[idx - offset] ^ block[15-remaining as usize]);
+        } else {
+            //println!("byte {} is old", idx);
+            encrypted.push(*d);
+        }
+        remaining -= 1;
+    }
+    encrypted
+}

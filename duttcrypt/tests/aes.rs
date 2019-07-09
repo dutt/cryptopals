@@ -593,3 +593,40 @@ fn ch20_break_aes_ctr() {
     //println!("text {}", text);
     assert_eq!(&text[0..114], "I'm ratee \"R\"...this is f warning, ya better void / Poets are paranoid, Cuz I cale back to attacl others in spite-");
 }
+
+#[test]
+fn ch25_test_edit() {
+    let key = aes::generate_key();
+    let nonce : u64 = random();
+    let raw = vec![1,2,3,4,5,6];
+    let padded = aes::pad_data(&raw);
+    let ciphertext = aes::encrypt_ctr(&key, &padded, nonce);
+    let newtext = [3,2,1];
+    let edited = aes::edit_ctr(&ciphertext, &key, nonce, 3, &newtext);
+    let origplaintext = aes::encrypt_ctr(&key, &ciphertext, nonce);
+    assert_eq!(origplaintext, padded);
+    let editplaintext = aes::encrypt_ctr(&key, &edited[..], nonce);
+    let exp_edit = vec![1,2,3,3,2,1];
+    let padded_exp_edit = aes::pad_data(&exp_edit);
+    assert_eq!(padded_exp_edit, editplaintext);
+}
+
+#[test]
+fn ch25_recover_plaintext() {
+    let content = fs::read_to_string("25.txt").expect("Failed to read file");
+    let content = content.replace("\n","");
+    let plaintext = base64::decode_str(&content);
+
+    let key = aes::generate_key();
+    let nonce : u64 = random();
+    let padded_plaintext = aes::pad_data(&plaintext);
+    let ciphertext = aes::encrypt_ctr(&key, &padded_plaintext, nonce);
+
+    let mut edittext = Vec::new();
+    edittext.resize(padded_plaintext.len(), 0);
+    let padded_edittext = aes::pad_data(&edittext);
+    let edited = aes::edit_ctr(&ciphertext, &key, nonce, 0, &padded_edittext);
+
+    let decrypted = xor::xor_bytes(&ciphertext, &edited);
+    assert_eq!(decrypted, padded_plaintext);
+}
