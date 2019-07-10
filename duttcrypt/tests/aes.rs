@@ -371,7 +371,7 @@ fn ch14_test_tricky_ecb_decrypt() {
 
 //
 // Challenge 16
-fn make_data(userdata : &str, key : &[u8]) -> Vec<u8> {
+fn make_data16(userdata : &str, key : &[u8]) -> Vec<u8> {
     let mut encoded = String::from(userdata);
     encoded = encoded.replace(";", "%3B").replace("=", "%3D");
     let prefixstr = "comment1=cooking%20MCs;userdata=";
@@ -388,7 +388,7 @@ fn make_data(userdata : &str, key : &[u8]) -> Vec<u8> {
     aes::encrypt_cbc(&padded, key, &key)
 }
 
-fn check_admin(encrypted : &[u8], key : &[u8]) -> bool {
+fn check_admin16(encrypted : &[u8], key : &[u8]) -> bool {
     let padded_clearbytes = aes::decrypt_cbc(encrypted, key, key);
     let clearbytes = pkcs7::strip(&padded_clearbytes);
     let cleartext = text::bytes(&clearbytes);
@@ -403,7 +403,7 @@ fn check_admin(encrypted : &[u8], key : &[u8]) -> bool {
     false
 }
 
-fn flip(data : &[u8]) -> Vec<u8> {
+fn flip16(data : &[u8]) -> Vec<u8> {
     let xor = vec![2, 11, 0, 4, 11, 83, 0, 64, 72, 64, 9];
     let mut retr = Vec::from(data);
     for i in 49..(49+xor.len()) {
@@ -416,12 +416,10 @@ fn flip(data : &[u8]) -> Vec<u8> {
 fn ch16_modify_cleartext_via_ciphertext() {
     let key = aes::generate_key();
     let userdata = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-    let data = make_data(userdata, &key);
-    let flipped = flip(&data);
-    let is_data_admin = check_admin(&data, &key);
-    let is_flipped_admin = check_admin(&flipped, &key);
-    assert_eq!(is_data_admin, false);
-    assert_eq!(is_flipped_admin, true);
+    let data = make_data16(userdata, &key);
+    let flipped = flip16(&data);
+    assert_eq!(check_admin16(&data, &key), false);
+    assert_eq!(check_admin16(&flipped, &key), true);
 }
 
 // Ch 17
@@ -629,4 +627,58 @@ fn ch25_recover_plaintext() {
 
     let decrypted = xor::xor_bytes(&ciphertext, &edited);
     assert_eq!(decrypted, padded_plaintext);
+}
+
+// ch 26
+
+fn make_data26(userdata : &str, key : &[u8], nonce : u64) -> Vec<u8> {
+    let mut encoded = String::from(userdata);
+    encoded = encoded.replace(";", "%3B").replace("=", "%3D");
+    let prefixstr = "comment1=cooking%20MCs;userdata=";
+    let prefix = prefixstr.as_bytes();
+    let postfixstr = ";comment2=%20like%20a%20pound%20of%20bacon";
+    let postfix = postfixstr.as_bytes();
+
+    let mut data = Vec::new();
+    data.extend(prefix);
+    data.extend(encoded.as_bytes());
+    data.extend(postfix);
+
+    aes::encrypt_ctr(key, &data, nonce)
+}
+
+fn check_admin26(ciphertext : &[u8], key : &[u8], nonce : u64) -> bool {
+    let plaintext = aes::encrypt_ctr(key, ciphertext, nonce);
+    let plaintext = text::bytes(&plaintext);
+    println!("plaintext {:?}", plaintext);
+
+    let mut decoded  = String::from(plaintext);
+    decoded = decoded.replace("%3B",";").replace("%3D", "=").replace("%20", " ");
+    let parts = decoded.split(";");
+    for p in parts {
+        if p == "admin=true" {
+            return true
+        }
+    }
+    false
+}
+
+fn flip26(data : &[u8]) -> Vec<u8> {
+    let xor = vec![2, 11, 0, 4, 11, 83, 0, 64, 72, 64, 9];
+    let mut retr = Vec::from(data);
+    for i in 65..(65+xor.len()) {
+        retr[i] ^= xor[i-65];
+    }
+    retr
+}
+
+#[test]
+fn ch26_ctr_bitflip() {
+    let key = aes::generate_key();
+    let nonce : u64 = random();
+    let userdata = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    let data = make_data26(userdata, &key, nonce);
+    let flipped = flip26(&data);
+    assert_eq!(check_admin26(&data, &key, nonce), false);
+    assert_eq!(check_admin26(&flipped, &key, nonce), true);
 }

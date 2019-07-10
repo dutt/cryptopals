@@ -140,3 +140,31 @@ fn ch24_crack_seed_key() {
     let cracked_seed = get_seed(&ciphertext);
     assert_eq!(raw_seed, cracked_seed);
 }
+
+fn generate_token(seed : u16) -> Vec<u8> {
+    let token = "user=1".as_bytes();
+    let encrypted = encrypt_mt19937(token, seed);
+    encrypted
+}
+
+fn validate_token(token  :&[u8]) -> bool {
+    let now = SystemTime::now();
+    let timestamp = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    for try_sec in 0..10 {
+        let seed = timestamp.as_secs() as u16 - try_sec;
+        let attempt = encrypt_mt19937(token, seed);
+        let part = &attempt[0..5];
+        return part == "user=".as_bytes();
+    }
+    false
+}
+
+#[test]
+fn ch24_password_token() {
+    let now = SystemTime::now();
+    let timestamp = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    let valid_token = generate_token(timestamp.as_secs() as u16);
+    let invalid_token = generate_token(3);
+    assert!(validate_token(&valid_token));
+    assert!(!validate_token(&invalid_token));
+}
