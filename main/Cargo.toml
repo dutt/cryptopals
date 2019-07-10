@@ -7,4 +7,5 @@ edition = "2018"
 [dependencies]
 duttcrypt = { path = "../duttcrypt" }
 aes = "0.3.2"
+sha-1 = "0.8.1"
 rand = "0.7"

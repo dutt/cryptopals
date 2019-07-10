@@ -8,3 +8,4 @@ pub mod aes;
 pub mod pkcs7;
 pub mod aes_oracle;
 pub mod random;
+pub mod sha1;
