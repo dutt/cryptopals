@@ -371,7 +371,7 @@ fn ch14_test_tricky_ecb_decrypt() {
 
 //
 // Challenge 16
-fn make_data16(userdata : &str, key : &[u8]) -> Vec<u8> {
+fn make_data16(userdata : &str, key : &[u8], iv : &[u8]) -> Vec<u8> {
     let mut encoded = String::from(userdata);
     encoded = encoded.replace(";", "%3B").replace("=", "%3D");
     let prefixstr = "comment1=cooking%20MCs;userdata=";
@@ -385,11 +385,11 @@ fn make_data16(userdata : &str, key : &[u8]) -> Vec<u8> {
     data.extend(postfix);
 
     let padded = aes::pad_data(&data);
-    aes::encrypt_cbc(&padded, key, &key)
+    aes::encrypt_cbc(&padded, key, iv)
 }
 
-fn check_admin16(encrypted : &[u8], key : &[u8]) -> bool {
-    let padded_clearbytes = aes::decrypt_cbc(encrypted, key, key);
+fn check_admin16(encrypted : &[u8], key : &[u8], iv : &[u8]) -> bool {
+    let padded_clearbytes = aes::decrypt_cbc(encrypted, key, iv);
     let clearbytes = pkcs7::strip(&padded_clearbytes);
     let cleartext = text::bytes(&clearbytes);
     let mut decoded  = String::from(cleartext);
@@ -415,11 +415,12 @@ fn flip16(data : &[u8]) -> Vec<u8> {
 #[test]
 fn ch16_modify_cleartext_via_ciphertext() {
     let key = aes::generate_key();
+    let iv = aes::generate_key();
     let userdata = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-    let data = make_data16(userdata, &key);
+    let data = make_data16(userdata, &key, &iv);
     let flipped = flip16(&data);
-    assert_eq!(check_admin16(&data, &key), false);
-    assert_eq!(check_admin16(&flipped, &key), true);
+    assert_eq!(check_admin16(&data, &key, &iv), false);
+    assert_eq!(check_admin16(&flipped, &key, &iv), true);
 }
 
 // Ch 17
