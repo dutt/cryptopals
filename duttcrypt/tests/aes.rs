@@ -683,3 +683,66 @@ fn ch26_ctr_bitflip() {
     assert_eq!(check_admin26(&data, &key, nonce), false);
     assert_eq!(check_admin26(&flipped, &key, nonce), true);
 }
+
+fn make_data27(userdata : &str, key : &[u8]) -> Vec<u8> {
+    let padded = aes::pad_data(&userdata.as_bytes());
+    aes::encrypt_cbc(&padded, key, key)
+}
+
+fn check_admin27(encrypted : &[u8], key : &[u8]) -> Result<bool, Vec<u8>> {
+    let padded_clearbytes = aes::decrypt_cbc(encrypted, key, key);
+    let clearbytes = pkcs7::strip(&padded_clearbytes);
+    for b in &clearbytes {
+        if b.is_ascii() == false {
+            return Err(clearbytes)
+        }
+    }
+    let cleartext = text::bytes(&clearbytes);
+    let mut decoded  = String::from(cleartext);
+    decoded = decoded.replace("%3B",";").replace("%3D", "=").replace("%20", " ");
+    let parts = decoded.split(";");
+    for p in parts {
+        if p == "admin=true" {
+            return Ok(true)
+        }
+    }
+    Ok(false)
+}
+
+fn modify27(ciphertext : &[u8]) -> Vec<u8> {
+    let chunk1 = ciphertext.iter().take(16);
+    let chunk2 = ciphertext.iter().take(16);
+    let mut retr : Vec<u8> = Vec::new();
+    retr.extend(chunk1);
+    retr.extend(vec![0;16]);
+    retr.extend(chunk2);
+    retr
+}
+
+fn recover_key(clearbytes : &[u8]) -> Vec<u8> {
+    let mut first : Vec<u8> = Vec::new();
+    let mut third = Vec::new();
+    for (idx, b) in clearbytes.iter().enumerate() {
+        //println!("idx {:?} b {:?}", idx, b);
+        if idx < 16 {
+            first.push(*b);
+        } else if idx >= 32 && idx < 48 {
+            third.push(*b);
+        }
+    }
+    xor::xor_bytes(&first, &third)
+}
+
+#[test]
+fn ch27_recover_key() {
+    let key = aes::generate_key();
+    // an A block, a B block, a C block
+    let block = "AAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCC";
+    let data = make_data27(&block, &key);
+    let modified = modify27(&data);
+    let recovered_key = match check_admin27(&modified, &key) {
+        Ok(_) => panic!("Ascii was valid"),
+        Err(plaintext) => recover_key(&plaintext)
+    };
+    assert_eq!(key, recovered_key);
+}
