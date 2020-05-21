@@ -4,9 +4,7 @@ pub fn sign(key : &[u8], message : &[u8]) -> Vec<u8> {
     let mut hasher = Sha1::new();
     hasher.input(key);
     hasher.input(message);
-    let mut retr = Vec::new();
-    retr.extend(hasher.result().iter());
-    retr
+    hasher.result().to_vec()
 }
 
 pub fn verify(key : &[u8], message : &[u8], sig : &[u8]) -> bool {

@@ -1,171 +1,94 @@
-use std::collections::HashMap;
+extern crate sha1;
 
-use rand::prelude::*;
+//use sha1::{Sha1, Digest};
+use sha1::{Sha1, Digest};
 
-use duttcrypt::pkcs7;
-use duttcrypt::aes;
-use duttcrypt::text;
-use duttcrypt::base64;
+fn get_sig(digest : Digest) -> Vec<u8> {
+    let mut retr = Vec::new();
+    retr.extend(digest.bytes().iter());
+    retr
+}
 
-fn _get_padding(chunks : &Vec<Vec<u8>>, key : &[u8], iv : &[u8]) -> (u8, u8, u8) {
-    let len = chunks.len();
-    for i in 0..255 {
-        let orig = chunks[len-2][15];
-        let mut data = chunks.clone();
-        if i == orig {
-            continue;
-        }
-        data[len-2][15] = i;
-        let mut full = Vec::new();
-        for c in &data {
-            full.extend(c);
-        }
-        if check_session(&full, &key, &iv) {
-            let val = i ^ orig ^ 1;
-            return (i, orig, val)
+fn sign(key : &[u8], message : &[u8]) -> (Digest, Vec<u8>) {
+    let mut hasher = Sha1::new();
+    //hasher.input(key);
+    //hasher.input(message);
+    //hasher.result().to_vec()
+    hasher.update(key);
+    hasher.update(message);
+    let digest = hasher.digest();
+    (digest, get_sig(hasher.digest()))
+}
+
+fn verify(key : &[u8], message : &[u8], sig : &[u8]) -> bool {
+    let mut hasher = Sha1::new();
+    //hasher.input(key);
+    //hasher.input(message);
+    hasher.update(key);
+    hasher.update(message);
+    //let r : &[u8] = &hasher.result();
+    let r : &[u8] = &hasher.digest().bytes();
+    r == sig
+}
+
+fn calculate_padding_len(data : &[u8]) -> u32 {
+    let len : u32 = (data.len() as u32 % 512) * 8;
+    let mut max = 512;
+    loop {
+        if len > max {
+            max += 512;
+        } else {
+            max -= 64;
+            return max - (1+len);
         }
     }
-    (0, 0, 0)
 }
 
-fn _decode_last_block(prev_block : &[u8], block : &[u8],
-                     _key : &[u8], _iv : &[u8], padding : &[u8]) -> Vec<u8> {
-    println!("prev_block {:?}", prev_block);
-    println!("block {:?}", block);
-    let padval = &padding[0];
-    let _count = padval + 1;
-
-    Vec::new()
-}
-
-fn produce_session(key : &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let lines = vec!["MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc=",
-                     "MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic=",
-                     "MDAwMDAyUXVpY2sgdG8gdGhlIHBvaW50LCB0byB0aGUgcG9pbnQsIG5vIGZha2luZw==",
-                     "MDAwMDAzQ29va2luZyBNQydzIGxpa2UgYSBwb3VuZCBvZiBiYWNvbg==",
-                     "MDAwMDA0QnVybmluZyAnZW0sIGlmIHlvdSBhaW4ndCBxdWljayBhbmQgbmltYmxl",
-                     "MDAwMDA1SSBnbyBjcmF6eSB3aGVuIEkgaGVhciBhIGN5bWJhbA==",
-                     "MDAwMDA2QW5kIGEgaGlnaCBoYXQgd2l0aCBhIHNvdXBlZCB1cCB0ZW1wbw==",
-                     "MDAwMDA3SSdtIG9uIGEgcm9sbCwgaXQncyB0aW1lIHRvIGdvIHNvbG8=",
-                     "MDAwMDA4b2xsaW4nIGluIG15IGZpdmUgcG9pbnQgb2g=",
-                     "MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG9"];
-    let mut rng = rand::thread_rng();
-    let line = lines.choose(&mut rng).unwrap().as_bytes();
-    let mut iv = vec![0;16];
-    rng.fill_bytes(&mut iv);
-    let padded_line = aes::pad_data(line);
-    println!("padded_line {:?}", padded_line);
-    let ciphertext = aes::encrypt_cbc(&padded_line, key, &iv);
-    (ciphertext, iv)
-}
-
-fn check_session(ciphertext : &[u8], key : &[u8], iv : &[u8]) -> bool {
-    let cleartext = aes::decrypt_cbc(ciphertext, key, iv);
-    //println!("cleartext {:?}", cleartext);
-    pkcs7::validate(&cleartext)
-}
-
-fn decode_block(prev_block : &Vec<u8>, block : &Vec<u8>,
-                key : &[u8], iv : &[u8]) -> Vec<u8> {
-    let mut known = HashMap::new();
-    'outer : for byte_index in (0..16).rev() {
-        println!("byte_index {:?}", byte_index);
-        let padding_value = 16u8 - byte_index as u8;
-        println!("padding_value {:?}", padding_value);
-        'inner : for i in 0..256u16 {
-            let iu = i as u8;
-            let orig = prev_block[byte_index];
-            let attempt = iu ^ padding_value as u8;
-            let mut data = prev_block.clone();
-            for pad_idx in (byte_index+1..16).rev() {
-                let (prev_val, prev_i) = known.get(&pad_idx).unwrap();
-                let newval = prev_i ^ padding_value as u8;
-                println!("prev_val {:?}, prev_i {}, padding_value {}", prev_val, prev_i, padding_value);
-                println!("{:?} to padding {}", pad_idx, newval);
-                data[pad_idx] = newval;
-            }
-            data[byte_index] = attempt;
-            let mut full = Vec::new();
-            //println!("data for {}:", i);
-            //for c in &data {
-            //    println!("{:?}", c);
-            //    full.extend(c);
-            //}
-            full.extend(data);
-            full.extend(block.iter());
-            let cleartext = aes::decrypt_cbc(&full, &key, &iv);
-            println!("full cleartext {:?}", cleartext);
-            //if byte_index == 8 {
-            //    println!("chunks, byte {} i {}", byte_index, i);
-            //    for c in &data {
-            //        println!("{:?}", c);
-            //    }
-
-            //}
-            if check_session(&full, &key, &iv) {
-                let val = iu ^ orig;
-                println!("known[{:?}] = {}", byte_index, val);
-                //if byte_index < 14 {
-                    //return ();
-                //}
-                let cleartext = aes::decrypt_cbc(&full, &key, &iv);
-                println!("known cleartext:");
-                for c in cleartext.chunks(16) {
-                    println!("{:?}", c);
-                }
-                println!("known1 {:?}", known);
-                if known.contains_key(&byte_index) {
-                    let (oldval, _) = known.get(&byte_index).unwrap();
-                    if *oldval == padding_value as u8 {
-                        println!("replacing old value for byte {:?} = ({},{})", byte_index, val, iu);
-                        known.insert(byte_index, (val, iu));
-                    }
-                    continue 'outer;
-                } else {
-                    known.insert(byte_index, (val, iu));
-                }
-                println!("known2 {:?}", known);
-            }
-        }
-        if known.contains_key(&byte_index) == false {
-            panic!("value for byte {} not found", byte_index);
-        }
-    }
-    let mut blockdata = Vec::new();
-    for i in (0..15).rev() {
-        let (val, _) = known.get(&i).unwrap();
-        blockdata.push(*val);
-    }
-    blockdata
+fn pad_data(data : &[u8]) -> Vec<u8> {
+    let pad_len = calculate_padding_len(data);
+    let odd = pad_len % 8;
+    let mut retr = Vec::new();
+    retr.extend(u64::to_be_bytes(data.len() as u64 * 8).iter());
+    retr
 }
 
 fn main() {
-    let key = aes::generate_key();
-    let (ciphertext, iv) = produce_session(&key);
-    let mut chunks = Vec::new();
-    for chunk in ciphertext.chunks(16) {
-        chunks.push(Vec::from(chunk));
-    }
-    println!("chunks pre");
-    for chunk in &chunks {
-        println!("{:?}", chunk);
-    }
+    //let mut hasher = Sha1::new();
+    ////hasher.input(b"foo");
+    ////println!("{:x?}", hasher.result());
+    assert_eq!(423, calculate_padding_len(b"abc"));
+    //hasher.update(b"foo");
+    //let digest = hasher.digest();
+    let key = b"velysecret!";
+    let msg = b"comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon";
+    let msg_size = msg.len() * 8;
+    //let msg_size = 704;
+    println!("msg size {:?}", msg_size);
+    println!("creating orig digest");
+    let (digest, _sig) = sign(key, msg);
+    //assert!(verify(key, msg, &sig));
+    //assert!(verify(key, b"foobaa", &sig) == false);
+    //assert!(verify(b"otherkey", msg, &sig) == false);
 
-    let len = chunks.len();
-    let mut all_known = Vec::new();
-    for chunk_index in (1..len).rev() {
-        let known = decode_block(&chunks[chunk_index-1], &chunks[chunk_index], &key, &iv);
-        for k in known {
-            all_known.insert(0, k);
-        }
-    }
-    let last_known = decode_block(&iv, &chunks[0], &key, &iv);
-    for k in last_known {
-        all_known.insert(0, k);
-    }
+    let first_padding_len = calculate_padding_len(msg);
+    println!("first_padding_len {:?}", first_padding_len);
 
-    println!("all_known {:?}", all_known);
-    let stripped = pkcs7::strip(&all_known);
-    println!("all_known {}", text::bytes(&stripped));
-    let base64ed = base64::decode(&stripped);
+    let extra_msg = b";admin=true";
+    let mut h2 = Sha1::from_registers(digest.registers());
+    //let padding = get_padding(extra_msg);
+    println!("adding glue");
+    h2.update(&u64::to_be_bytes(msg_size as u64));
+    println!("adding admin");
+    h2.update(extra_msg);
+    let digest = h2.digest();
+
+    let full_new_msg = b"comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon;admin=true";
+    assert!(verify(key, full_new_msg, &digest.bytes()));
+}
+
+fn _str_to_vec(text : &str) -> Vec<u8> {
+    let chars : Vec<_> = text.chars().collect();
+    let pairs : Vec<String> = chars.chunks(2).map(|p| p[0].to_string() + &p[1].to_string()).collect();
+    let data : Vec<u8> = pairs.iter().map(|p| u8::from_str_radix(p, 16).unwrap()).collect();
+    data
 }
